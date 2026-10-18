@@ -6,12 +6,6 @@ A standalone .NET 10 / PostgreSQL 17 backend for accounts, rooms, and WebSocket 
 
 .NET SDK 10 and Homebrew PostgreSQL 17 are installed. The project-specific database is stored in `.local/pgdata`, listens only on 127.0.0.1:55432, and uses SCRAM password authentication. It is not configured to start automatically at login. Actual secrets are kept in the ignored `.local` directory and are not included in this document.
 
-```sh
-cd '/Users/huangyingyi/Documents/工作/digitchess-backend'
-./scripts/init-local.sh
-./scripts/run-local.sh
-```
-
 The backend runs at http://127.0.0.1:5080. Check its readiness from another terminal:
 
 ```sh
