@@ -1,0 +1,17 @@
+# Run local database only: docker compose -f compose.local.yaml up -d db
+name: digitchess-local
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: digitchess
+      POSTGRES_DB: digitchess
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    ports: ['127.0.0.1:55432:5432']
+    volumes: [local_pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U digitchess -d digitchess']
+      interval: 5s
+      retries: 20
+volumes:
+  local_pgdata:

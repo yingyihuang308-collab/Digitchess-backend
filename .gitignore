@@ -1,0 +1,12 @@
+.local/
+.env
+.env.*
+!.env.example
+bin/
+obj/
+*.pem
+*.dump
+*.log
+
+__pycache__/
+*.pyc

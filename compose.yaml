@@ -1,0 +1,74 @@
+name: digitchess
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: digitchess
+      POSTGRES_DB: digitchess
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U digitchess -d digitchess']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  migrate:
+    build: .
+    image: digitchess-backend:local
+    user: '${BACKEND_UID:-1000}:${BACKEND_GID:-1000}'
+    command: [--migrate]
+    environment: &environment
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Database: 'Host=db;Database=digitchess;Username=digitchess;Password=${POSTGRES_PASSWORD:?Set password}'
+      Auth__PrivateKeyPath: /run/secrets/jwt-private.pem
+      Proxy__Address: 172.30.90.2
+      Cors__Origins__0: ${WEBGL_ORIGIN:?Set WEBGL_ORIGIN}
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+    volumes: &keyvolume
+      - ./.local/jwt-private.pem:/run/secrets/jwt-private.pem:ro
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [internal]
+    logging: *logging
+  backend:
+    image: digitchess-backend:local
+    build: .
+    restart: unless-stopped
+    user: '${BACKEND_UID:-1000}:${BACKEND_GID:-1000}'
+    environment: *environment
+    volumes: *keyvolume
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks:
+      internal: {}
+      edge: {ipv4_address: 172.30.90.3}
+    logging: *logging
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [backend]
+    networks:
+      edge: {ipv4_address: 172.30.90.2}
+    logging: *logging
+networks:
+  internal: {internal: true}
+  edge:
+    ipam:
+      config: [{subnet: 172.30.90.0/24}]
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
