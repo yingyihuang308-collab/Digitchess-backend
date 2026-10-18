@@ -1,10 +1,10 @@
-# DigitChess 通用后端
+# DigitChess Backend
 
-独立 .NET10 / PostgreSQL17 后端：账号、房间、WebSocket消息转发。没有棋局、走法、GameState 或私有项目代码。Unity 双线路改动保留在父目录的私有 Assets 中，发布后端时仅发布本目录。
+A standalone .NET 10 / PostgreSQL 17 backend for accounts, rooms, and WebSocket message forwarding. It contains no board state, move validation, GameState implementation, or code copied from the private project. The Unity changes for the two connection options remain in the private Assets directory of the parent project. Publish only this directory when publishing the backend.
 
-## 当前机器直接运行
+## Running on the Current Development Machine
 
-已安装 .NET SDK10 与 Homebrew PostgreSQL17。项目专用数据在 `.local/pgdata`，只监听127.0.0.1:55432，使用SCRAM密码认证，未设置开机启动。真实秘密只在被忽略的 `.local` 内，不写入本文。
+.NET SDK 10 and Homebrew PostgreSQL 17 are installed. The project-specific database is stored in `.local/pgdata`, listens only on 127.0.0.1:55432, and uses SCRAM password authentication. It is not configured to start automatically at login. Actual secrets are kept in the ignored `.local` directory and are not included in this document.
 
 ```sh
 cd '/Users/huangyingyi/Documents/工作/digitchess-backend'
@@ -12,33 +12,33 @@ cd '/Users/huangyingyi/Documents/工作/digitchess-backend'
 ./scripts/run-local.sh
 ```
 
-后端地址 http://127.0.0.1:5080；另一个终端检查：
+The backend runs at http://127.0.0.1:5080. Check its readiness from another terminal:
 
 ```sh
 curl -f http://127.0.0.1:5080/health/ready
 ```
 
-如果5080已有本次启动的服务，不要重复启动。Ctrl+C停止前台后端；数据库单独停止：
+If the service is already running on port 5080, do not start another instance. Press Ctrl+C to stop a backend running in the foreground. Stop the database separately:
 
 ```sh
 /opt/homebrew/opt/postgresql@17/bin/pg_ctl -D .local/pgdata -m fast stop
 ```
 
-init-local.sh幂等，不覆盖已有数据库、密码或私钥。若本机 PostgreSQL 不在默认路径，传入 PG_BIN。不要删除 `.local` 来解决启动错误，它包含账号数据库与秘密。
+`init-local.sh` is idempotent: it does not overwrite an existing database, password, or private key. Set `PG_BIN` if PostgreSQL is installed somewhere other than the default location. Do not delete `.local` to resolve startup errors; it contains the account database and secrets.
 
-## 其他机器
+## Running on Other Machines
 
-安装 .NET10 SDK、PostgreSQL17、OpenSSL。macOS Homebrew：`brew install postgresql@17`。Linux按发行版安装官方PostgreSQL包，指定PG_BIN，或用Docker启动数据库。
+Install the .NET 10 SDK, PostgreSQL 17, and OpenSSL. On macOS with Homebrew, run `brew install postgresql@17`. On Linux, install the official PostgreSQL packages for your distribution and set `PG_BIN`, or run the database with Docker.
 
-Docker数据库替代方式：
+To use Docker for the database instead:
 
 ```sh
 cp .env.example .env
-# 在.env中填随机POSTGRES_PASSWORD
+# Set POSTGRES_PASSWORD in .env to a randomly generated password.
 docker compose -f compose.local.yaml up -d db
 ```
 
-Docker数据库与原生数据库都占用55432，只选一种；它们的数据卷彼此独立。使用Docker时自行生成本地RSA私钥，并设置 `ConnectionStrings__Database`、`Auth__PrivateKeyPath`、`ASPNETCORE_ENVIRONMENT=Development`、`ASPNETCORE_URLS=http://127.0.0.1:5080`，不要再运行原生init脚本。然后：
+Both the Docker database and the native database use port 55432, so choose one. Their data volumes are independent. When using Docker, generate a local RSA private key and configure `ConnectionStrings__Database`, `Auth__PrivateKeyPath`, `ASPNETCORE_ENVIRONMENT=Development`, and `ASPNETCORE_URLS=http://127.0.0.1:5080`. Do not run the native database initialization script as well. Then run:
 
 ```sh
 dotnet restore src/Backend
@@ -46,18 +46,18 @@ dotnet run --project src/Backend -- --migrate
 dotnet run --no-build --project src/Backend
 ```
 
-所有环境都显式执行迁移。更新schema时：
+Run migrations explicitly in every environment. To create a migration after changing the schema:
 
 ```sh
 dotnet tool install --tool-path .local/tools dotnet-ef --version 10.0.12
-.local/tools/dotnet-ef migrations add 描述名称 --project src/Backend
+.local/tools/dotnet-ef migrations add DescriptiveMigrationName --project src/Backend
 ```
 
-迁移源文件提交仓库；真实私钥、数据库数据、密码和备份不提交。
+Commit migration source files to the repository. Do not commit actual private keys, database files, passwords, or backups.
 
-## 双客户端集成测试
+## Two-Client Integration Tests
 
-使用单独终端，以5秒测试宽限启动后端（正式默认45秒）：
+Start the backend in a separate terminal with a 5-second reconnection grace period for testing. The production default is 45 seconds.
 
 ```sh
 . .local/local.env
@@ -65,29 +65,29 @@ export Rooms__ReconnectSeconds=5
 dotnet run --project src/Backend
 ```
 
-再运行：
+Then run:
 
 ```sh
 dotnet run --project tests/Integration
 ```
 
-测试创建随机账号和房间，验证真实数据库、HTTP与WebSocket。测试中会断开自己的连接、关闭自己的房间；只对本地测试服务运行。默认读取本地私钥生成一个正确签名但已过期的测试JWT，以核查过期校验；不会输出私钥。
+The tests create random accounts and rooms to validate the actual database, HTTP API, and WebSocket connections. They disconnect their own connections and close their own rooms. Run them only against a local test service. When the local private key is available, the tests use it to generate a correctly signed but expired test JWT to verify expiration checks. They do not print the private key.
 
-测试结束后重启后端和PostgreSQL，再运行：
+After the tests finish, restart both the backend and PostgreSQL, then run:
 
 ```sh
 python3 scripts/probe-persistence.py
 ```
 
-并发刷新可另行运行 `python3 scripts/probe-refresh-concurrency.py`。
+To test concurrent refresh requests separately, run `python3 scripts/probe-refresh-concurrency.py`.
 
-持久化探针使用 `.local/persistence-probe.json` 的随机测试账号，检查固定ID、昵称和密码登录在重启后仍有效。不用于正式账号。
+The persistence probe uses the random test account in `.local/persistence-probe.json` to check that its fixed player ID, nickname, and password login still work after a restart. It is not intended for production accounts.
 
-## 文档
+## Documentation
 
-- [协议与数据行为](docs/PROTOCOL.md)
-- [Unity接入与线路切换](docs/UNITY.md)
-- [Oracle部署、备份与回滚](docs/DEPLOYMENT.md)
-- [实际验证结果与限制](docs/VERIFICATION.md)
+- [Protocol and Data Behavior](docs/PROTOCOL.md)
+- [Unity Integration and Connection Switching](docs/UNITY.md)
+- [Oracle Deployment, Backups, and Rollback](docs/DEPLOYMENT.md)
+- [Verification Results and Limitations](docs/VERIFICATION.md)
 
-第一版为单实例，房间存在内存中；重启需重新建房。昵称可改但不能用作账号身份；没有找回密码、邮箱验证、第三方登录、跨线路账号绑定和战绩共享。房主负责规则判断，仍有房主作弊风险。跨线路切换需要重新建房，不是对局无缝迁移。
+The first version runs as a single instance and stores rooms in memory, so rooms must be recreated after a restart. Nicknames can be changed but cannot be used as account identities. Password recovery, email verification, third-party login, account linking between connection options, and shared match records are not implemented. The host validates game rules, so host cheating remains possible. Switching between the self-hosted server and Unity Relay requires a new room; it does not seamlessly migrate an ongoing match.
